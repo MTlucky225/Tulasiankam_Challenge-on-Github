@@ -1,0 +1,144 @@
+Step 1: Set up the AWS Environment
+Create an AWS account and set up an EC2  instance to host the web server.
+Generate an SSH key pair and store the private key securely on your local machine.
+
+Step 2: Install Ansible 
+
+Step 3: Ansible Playbook
+Create an Ansible playbook (e.g., deploy_web_server.yml) 
+Create an EC2 instance with the desired configuration, including the instance type, security groups, and subnet.
+Install and configure the Nginx web server to serve the static content specified in the HTML file.
+Set up a self-signed SSL certificate for HTTPS and configure Nginx to redirect HTTP requests to HTTPS.
+Configure the security groups to only allow inbound traffic on ports 80 (HTTP) and 443 (HTTPS).
+
+yaml
+Copy code
+- name: Provision EC2 instance
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Create EC2 instance
+      ec2:
+        key_name: my-ssh-key  # Use the name of  SSH key pair
+        instance_type: t2.micro  # Change to  instance type
+        image: ami-****  # Replace with the AMI ID of base image
+        region: us-east-1  # Replace with region
+        group: my-security-group  # Replace with the name of security group
+        subnet_id: subnet-**** # Replace with the ID of subnet
+        wait: yes
+        instance_tags:
+          Name: TestWebServer
+      register: ec2_instance
+
+- name: Configure web server
+  hosts: ec2_instance
+  become: true
+  tasks:
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Copy HTML file
+      copy:
+        src: index.html
+        dest: /usr/share/nginx/html/index.html
+
+    - name: Configure Nginx
+      copy:
+        src: nginx.conf
+        dest: /etc/nginx/sites-available/default
+      notify:
+        - Restart Nginx
+
+    - name: Generate self-signed SSL certificate
+      openssl_certificate:
+        path: /etc/nginx/ssl/cert.pem
+        privatekey_path: /etc/nginx/ssl/key.pem
+        common_name: testwebserver.com  # Replace with your domain name
+        owner: www-data
+        group: www-data
+        mode: 0600
+      notify:
+        - Restart Nginx
+
+- name: Allow HTTP and HTTPS traffic
+  hosts: localhost
+  gather_facts: False
+  tasks:
+    - name: Add inbound rules to security group
+      ec2_group:
+        name: my-security-group 
+        region: us-east-1 
+        rules:
+          - proto: tcp
+            ports:
+              - 80
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            ports:
+              - 443
+            cidr_ip: 0.0.0.0/0
+
+- name: Restart Nginx
+  hosts: ec2_instance
+  become: true
+  tasks:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
+Step 4: Create HTML and Nginx Configuration Files
+
+Create an index.html file 
+
+html
+Copy code
+<html>
+<head>
+<title>Hello World</title>
+</head>
+<body>
+<h1>Hello World! </h1>
+</body>
+</html>
+
+Create an nginx.conf file containing the Nginx configuration:
+
+perl
+Copy code
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name mywebserver.com;  # Replace with your domain name
+
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+    }
+}
+
+Step 5: Run the Ansible Playbook
+Run the Ansible playbook with EC2 instance and configure the web server:
+ansible-playbook deploy_web_server.yml
+
+Step 6: Access the Web Application
+Once the playbook completes successfully, the web server will be  running. we can access the web application by navigating to the EC2 instance's public IP address or the domain name configured in the Nginx configuration.
+
+
+
+
+
+
+
